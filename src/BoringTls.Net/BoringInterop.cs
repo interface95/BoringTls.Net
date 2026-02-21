@@ -3,9 +3,9 @@ using System.Runtime.InteropServices;
 namespace BoringTls.Net;
 
 /// <summary>
-/// BoringSSL P/Invoke 声明 — 最小子集，仅包含 TLS 客户端握手所需的 API
+/// BoringSSL P/Invoke 声明 — TLS 客户端握手 + 完整指纹控制
 /// </summary>
-internal static partial class BoringInterop
+public static partial class BoringInterop
 {
     // 使用 'b' 前缀避免与系统 OpenSSL 的 libssl/libcrypto 冲突
     private const string LibSsl = "libbssl";
@@ -154,6 +154,47 @@ internal static partial class BoringInterop
     [LibraryImport(LibSsl, EntryPoint = "SSL_CTX_set_max_proto_version")]
     internal static partial int SSL_CTX_set_max_proto_version(nint ctx, ushort version);
 
+    // ============ ★ 高级指纹控制 ============
+
+    /// <summary>★ ECH GREASE — 模拟 Encrypted Client Hello GREASE 扩展</summary>
+    [LibraryImport(LibSsl, EntryPoint = "SSL_set_enable_ech_grease")]
+    internal static partial void SSL_set_enable_ech_grease(nint ssl, int enabled);
+
+    /// <summary>★ SCT — 启用签名证书时间戳 (Signed Certificate Timestamps)</summary>
+    [LibraryImport(LibSsl, EntryPoint = "SSL_enable_signed_cert_timestamps")]
+    internal static partial void SSL_enable_signed_cert_timestamps(nint ssl);
+
+    /// <summary>★ OCSP Stapling — 启用在线证书状态协议</summary>
+    [LibraryImport(LibSsl, EntryPoint = "SSL_enable_ocsp_stapling")]
+    internal static partial void SSL_enable_ocsp_stapling(nint ssl);
+
+    /// <summary>★ 证书压缩算法 (compress_certificate extension)</summary>
+    [LibraryImport(LibSsl, EntryPoint = "SSL_CTX_add_cert_compression_alg")]
+    internal static partial int SSL_CTX_add_cert_compression_alg(
+        nint ctx, ushort algId, nint compressFunc, nint decompressFunc);
+
+    /// <summary>★ ALPS — Application-Layer Protocol Settings</summary>
+    [LibraryImport(LibSsl, EntryPoint = "SSL_add_application_settings",
+        StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial int SSL_add_application_settings(
+        nint ssl, ref byte proto, nuint protoLen, ref byte settings, nuint settingsLen);
+
+    /// <summary>★ Session cache 模式（控制 session ticket 行为）</summary>
+    [LibraryImport(LibSsl, EntryPoint = "SSL_CTX_set_session_cache_mode")]
+    internal static partial int SSL_CTX_set_session_cache_mode(nint ctx, int mode);
+
+    /// <summary>★ 证书验证模式</summary>
+    [LibraryImport(LibSsl, EntryPoint = "SSL_CTX_set_verify")]
+    internal static partial void SSL_CTX_set_verify(nint ctx, int mode, nint verifyCallback);
+
+    /// <summary>★ SSL_CTX 选项控制</summary>
+    [LibraryImport(LibSsl, EntryPoint = "SSL_CTX_set_options")]
+    internal static partial long SSL_CTX_set_options(nint ctx, long options);
+
+    /// <summary>获取握手后协商的 TLS 版本</summary>
+    [LibraryImport(LibSsl, EntryPoint = "SSL_version")]
+    internal static partial int SSL_version(nint ssl);
+
     // ============ 错误处理 ============
 
     [LibraryImport(LibCrypto, EntryPoint = "ERR_get_error")]
@@ -171,10 +212,29 @@ internal static partial class BoringInterop
     internal const int SSL_ERROR_SYSCALL = 5;
     internal const int SSL_ERROR_ZERO_RETURN = 6;
 
-    internal const ushort TLS1_VERSION = 0x0301;
-    internal const ushort TLS1_1_VERSION = 0x0302;
-    internal const ushort TLS1_2_VERSION = 0x0303;
-    internal const ushort TLS1_3_VERSION = 0x0304;
+    /// <summary>TLS 1.0</summary>
+    public const ushort TLS1_VERSION = 0x0301;
+    /// <summary>TLS 1.1</summary>
+    public const ushort TLS1_1_VERSION = 0x0302;
+    /// <summary>TLS 1.2</summary>
+    public const ushort TLS1_2_VERSION = 0x0303;
+    /// <summary>TLS 1.3</summary>
+    public const ushort TLS1_3_VERSION = 0x0304;
+
+    // Cert verify 模式
+    internal const int SSL_VERIFY_NONE = 0;
+    internal const int SSL_VERIFY_PEER = 1;
+
+    // Session cache 模式
+    internal const int SSL_SESS_CACHE_OFF = 0;
+    internal const int SSL_SESS_CACHE_CLIENT = 1;
+    internal const int SSL_SESS_CACHE_SERVER = 2;
+
+    // Cert compression algorithm IDs
+    /// <summary>Brotli 证书压缩 (Chrome 使用)</summary>
+    public const ushort TLSEXT_cert_compression_brotli = 2;
+    /// <summary>Zlib 证书压缩</summary>
+    public const ushort TLSEXT_cert_compression_zlib = 1;
 
     // ============ 辅助方法 ============
 

@@ -60,6 +60,14 @@ public sealed class BoringSslStream : Stream
         // ★ Extension 顺序（CTX 级别）
         BoringInterop.SSL_CTX_set_permute_extensions(_ctx, config.PermuteExtensions ? 1 : 0);
 
+        // ★ 证书压缩（CTX 级别 — Chrome 使用 Brotli）
+        foreach (var algId in config.CertCompressionAlgIds)
+            BoringInterop.SSL_CTX_add_cert_compression_alg(_ctx, algId, 0, 0);
+
+        // ★ 证书验证
+        if (config.SkipCertVerification)
+            BoringInterop.SSL_CTX_set_verify(_ctx, BoringInterop.SSL_VERIFY_NONE, 0);
+
         // 创建 SSL 对象
         _ssl = BoringInterop.SSL_new(_ctx);
         if (_ssl == 0) throw new BoringSslException("SSL_new 失败");
@@ -67,12 +75,39 @@ public sealed class BoringSslStream : Stream
         // SNI
         BoringInterop.SSL_set_tlsext_host_name(_ssl, host);
 
+        // ★ ECH GREASE（SSL 级别）
+        if (config.EchGreaseEnabled)
+            BoringInterop.SSL_set_enable_ech_grease(_ssl, 1);
+
+        // ★ SCT（SSL 级别）
+        if (config.SctEnabled)
+            BoringInterop.SSL_enable_signed_cert_timestamps(_ssl);
+
+        // ★ OCSP Stapling（SSL 级别）
+        if (config.OcspStaplingEnabled)
+            BoringInterop.SSL_enable_ocsp_stapling(_ssl);
+
         // ALPN
         if (config.AlpnProtos is { Length: > 0 })
         {
             var alpnBytes = BoringInterop.BuildAlpnProtos(config.AlpnProtos);
             ref var alpnRef = ref alpnBytes[0];
             BoringInterop.SSL_set_alpn_protos(_ssl, ref alpnRef, alpnBytes.Length);
+        }
+
+        // ★ ALPS（SSL 级别 — 在 ALPN 之后设置）
+        foreach (var alpsProto in config.AlpsProtocols)
+        {
+            var protoBytes = System.Text.Encoding.ASCII.GetBytes(alpsProto);
+            var emptySettings = Array.Empty<byte>();
+            ref var protoRef = ref protoBytes[0];
+            // 空 settings — 只是声明支持 ALPS
+            if (emptySettings.Length == 0)
+            {
+                byte dummy = 0;
+                BoringInterop.SSL_add_application_settings(
+                    _ssl, ref protoRef, (nuint)protoBytes.Length, ref dummy, 0);
+            }
         }
 
         // 客户端模式
