@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="BoringTls.Net.Tests" />
+    <InternalsVisibleTo Include="ZeroGravityNet.Tests" />
   </ItemGroup>
 
   <!-- README 打入 NuGet 包 -->
